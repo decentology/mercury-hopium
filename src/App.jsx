@@ -8,7 +8,6 @@ fcl.config()
 
 function App() {
   const [user, setUser] = useState({});
-  console.log(user);
 
   const onSignIn = (event) => {
     event.preventDefault();
@@ -49,6 +48,47 @@ function App() {
     console.log(balance);
   };
 
+  const onSend = async (event) => {
+    event.preventDefault();
+
+    try {
+      const transactionId = await fcl.send([
+        fcl.transaction`
+          import FungibleToken from 0x9a0766d93b6608b7
+          import FlowToken from 0x7e60df042a9c0868
+  
+          transaction() {
+            prepare(account: AuthAccount) {
+              let senderTokenVault = account
+                .borrow<&FungibleToken.Vault>(from: /storage/flowTokenVault)!
+  
+              let receiver = getAccount(0x68da684995d89f0e)
+              let receiverTokenVault = receiver
+                .getCapability(/public/flowTokenReceiver)
+                .borrow<&FlowToken.Vault{FungibleToken.Receiver}>()
+                ?? panic("Couldn't borrow a reference to receiver vault.")
+  
+              receiverTokenVault.deposit(from: <- senderTokenVault.withdraw(amount: 10.0))
+            }
+            execute {
+  
+            }
+          }
+        `,
+        fcl.payer(fcl.authz),
+        fcl.proposer(fcl.authz),
+        fcl.authorizations([fcl.authz]),
+        fcl.limit(9999)
+      ]).then(fcl.decode);
+      console.log(transactionId);
+  
+      const result = await fcl.tx(transactionId).onceSealed();
+      console.log(result);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   return (
     <div className="App">
       <h1>Hello!</h1>
@@ -60,6 +100,9 @@ function App() {
           <div>
             <div>
               <button onClick={onExecuteScript}>Execute Script</button>
+            </div>
+            <div>
+              <button onClick={onSend}>Send FLOW</button>
             </div>
             <div>
               <button onClick={onSignOut}>Sign Out</button>
