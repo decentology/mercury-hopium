@@ -7,7 +7,9 @@ import Account from './Account.jsx';
 const accounts = [
   '0xccea6c9965b5831a',
   '0xd9c6c734c01fe2e1',
-  '0x68da684995d89f0e'
+  '0x68da684995d89f0e',
+  '0xe37a242dfff69bbc',
+  '0xa3ed3e0598a583bd'
 ];
 
 function Page(props) {
