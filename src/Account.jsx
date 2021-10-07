@@ -5,6 +5,7 @@ import * as FlowTypes from '@onflow/types';
 function Account(props) {
   const [balance, setBalance] = useState(null);
   const [hasCollection, setHasCollection] = useState(null);
+  const [nifties, setNifties] = useState(null);
 
   const fetchBalance = async (address) => {
     const balance = await fcl.send([
@@ -50,59 +51,67 @@ function Account(props) {
     setHasCollection(hasCollection);
   };
 
-  const onCreateCollection = async (event) => {
-    event.preventDefault();
+  const fetchCollection = async (address) => {
+    const nifties = await fcl.send([
+      fcl.script`
+        import AwesomeNifty from 0xccea6c9965b5831a
 
-    try {
-      const transactionId = await fcl.send([
-        fcl.transaction`
-          import AwesomeNifty from 0xccea6c9965b5831a
-  
-          transaction() {
-            prepare(account: AuthAccount) {
-              let collection <- AwesomeNifty.createCollection()
-              
-              account.save(
-                <- collection,
-                to: /storage/awesomeNiftyCollection
-              )
-          
-              account.link<&{AwesomeNifty.Receiver}>(
-                /public/awesomeNiftyCollection,
-                target: /storage/awesomeNiftyCollection
-              )
+        pub fun main(address: Address): [{String: String}]? {
+          let collectionRef = getAccount(address)
+            .getCapability(/public/awesomeNiftyCollection)
+            .borrow<&{AwesomeNifty.Receiver}>()
+
+          if collectionRef != nil {
+            let result: [{String: String}] = []
+            for ID in collectionRef!.getIDs() {
+              result.append({
+                "ID": ID.toString(),
+                "name": collectionRef!.getName(ID: ID)!
+              })
             }
-            execute {}
+
+            return result
           }
-        `,
-        fcl.args([]),
-        fcl.payer(fcl.authz),
-        fcl.proposer(fcl.authz),
-        fcl.authorizations([fcl.authz]),
-        fcl.limit(9999)
-      ]).then(fcl.decode);
-      console.log(transactionId);
-  
-      const result = await fcl.tx(transactionId).onceSealed();
-      console.log(result);
-    } catch (error) {
-      console.error(error);
-    }
+
+          return nil
+        }
+      `,
+      fcl.args([
+        fcl.arg(address, FlowTypes.Address)
+      ])
+    ]).then(fcl.decode);
+
+    setNifties(nifties);
   };
 
   useEffect(() => {
     fetchBalance(props.address);
     checkCollection(props.address);
+    fetchCollection(props.address);
   }, [props.address]);
 
   return (
     <div>
-      <span style={{marginRight: '8px'}}>{props.address}</span>
-      <span>balance: {balance === null ? 'loading...' : balance}</span>
-      <span>has collection: {hasCollection === true ? 'yes' : 'no'}</span>
-      {hasCollection === false &&
-        <button onClick={onCreateCollection}>create collection</button>
-      }
+      <ul>
+        <li>
+          <strong>{props.address}</strong>
+        </li>
+        <li>
+          Balance: {balance === null ? 'loading...' : `${balance} FLOW`}
+        </li>
+        <li>
+          Has collection: {hasCollection === true ? 'yes' : 'no'}
+        </li>
+        {nifties &&
+          <ul>
+            {nifties.map((nifty) => {
+              return (
+                <li key={nifty.ID}>{nifty.name}</li>
+              );
+            })}
+          </ul>
+        }
+      </ul>
     </div>
   );
 }

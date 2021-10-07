@@ -1,6 +1,5 @@
 import React, {useState, useEffect} from 'react';
 import * as fcl from '@onflow/fcl';
-import * as FlowTypes from '@onflow/types';
 
 import Page from './Page.jsx';
 
@@ -10,6 +9,7 @@ fcl.config()
 
 function App() {
   const [user, setUser] = useState({});
+  console.log(user);
 
   const onSignIn = (event) => {
     event.preventDefault();
@@ -22,7 +22,6 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Hello!</h1>
       <div>
         {!user.loggedIn &&
           <button onClick={onSignIn}>Sign In / Up</button>

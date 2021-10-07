@@ -13,6 +13,7 @@ pub contract AwesomeNifty {
   pub resource interface Receiver {
     pub fun deposit(nifty: @NFT)
     pub fun getIDs(): [UInt64]
+    pub fun getName(ID: UInt64): String?
   }
 
   pub resource Collection: Receiver {
@@ -35,6 +36,9 @@ pub contract AwesomeNifty {
     }
     pub fun getIDs(): [UInt64] {
       return self.nifties.keys
+    }
+    pub fun getName(ID: UInt64): String? {
+      return self.nifties[ID]?.name
     }
   }
 

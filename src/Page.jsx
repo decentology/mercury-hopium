@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import * as fcl from '@onflow/fcl';
 import * as FlowTypes from '@onflow/types';
 
@@ -16,12 +16,13 @@ function Page(props) {
   const {user} = props;
   const [amount, setAmount] = useState(0);
   const [receiverAddress, setReceiverAddress] = useState(accounts[0]);
+  const [hasCollection, setHasCollection] = useState(null);
+  const [niftyName, setNiftyName] = useState('');
 
   const onSignOut = (event) => {
     event.preventDefault();
     fcl.unauthenticate();
   };
-
   const onExecuteScript = async (event) => {
     event.preventDefault();
 
@@ -47,6 +48,68 @@ function Page(props) {
     console.log(user.addr);
     console.log(balance);
   };
+  const onCreateCollection = async (event) => {
+    event.preventDefault();
+
+    try {
+      const transactionId = await fcl.send([
+        fcl.transaction`
+          import AwesomeNifty from 0xccea6c9965b5831a
+  
+          transaction() {
+            prepare(account: AuthAccount) {
+              let collection <- AwesomeNifty.createCollection()
+              
+              account.save(
+                <- collection,
+                to: /storage/awesomeNiftyCollection
+              )
+          
+              account.link<&{AwesomeNifty.Receiver}>(
+                /public/awesomeNiftyCollection,
+                target: /storage/awesomeNiftyCollection
+              )
+            }
+            execute {}
+          }
+        `,
+        fcl.args([]),
+        fcl.payer(fcl.authz),
+        fcl.proposer(fcl.authz),
+        fcl.authorizations([fcl.authz]),
+        fcl.limit(9999)
+      ]).then(fcl.decode);
+      console.log(transactionId);
+  
+      const result = await fcl.tx(transactionId).onceSealed();
+      console.log(result);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+  const checkCollection = useCallback(
+    async (address) => {
+      const hasCollection = await fcl.send([
+        fcl.script`
+          import AwesomeNifty from 0xccea6c9965b5831a
+  
+          pub fun main(address: Address): Bool {
+            let collectionRef = getAccount(address)
+              .getCapability(/public/awesomeNiftyCollection)
+              .borrow<&{AwesomeNifty.Receiver}>()
+  
+            return collectionRef == nil ? false : true
+          }
+        `,
+        fcl.args([
+          fcl.arg(user.addr, FlowTypes.Address)
+        ])
+      ]).then(fcl.decode);
+  
+      setHasCollection(hasCollection);
+    },
+    [user.addr]
+  );
 
   const onSend = async (event) => {
     event.preventDefault();
@@ -93,8 +156,60 @@ function Page(props) {
     }
   };
 
+  const onMint = async (event) => {
+    event.preventDefault();
+    
+    try {
+      const transactionId = await fcl.send([
+        fcl.transaction`
+          import AwesomeNifty from 0xccea6c9965b5831a
+
+          transaction(name: String, receiverAddress: Address) {
+            prepare(account: AuthAccount) {
+              // Authorized
+              // let collection <- account.load<@AwesomeNifty.Collection>(from: /storage/awesomeNiftyCollection)!
+              // account.save(<- collection, to: /storage/awesomeNiftyCollection)
+              // destroy collection
+              
+              let minter <- account.load<@AwesomeNifty.Minter>(from: /storage/awesomeNiftyMinter)!
+              let nifty <- minter.mint(name: name)
+              account.save(
+                <- minter,
+                to: /storage/awesomeNiftyMinter
+              )
+
+              let receiver = getAccount(receiverAddress)
+                .getCapability(/public/awesomeNiftyCollection)
+                .borrow<&{AwesomeNifty.Receiver}>()
+                ?? panic("Couldn't borrow the receiver's collection.")
+
+              receiver.deposit(nifty: <- nifty)
+            }
+          }
+        `,
+        fcl.args([
+          fcl.arg(niftyName, FlowTypes.String),
+          fcl.arg(receiverAddress, FlowTypes.Address)
+        ]),
+        fcl.payer(fcl.authz),
+        fcl.proposer(fcl.authz),
+        fcl.authorizations([fcl.authz]),
+        fcl.limit(9999)
+      ]).then(fcl.decode);
+
+      const result = await fcl.tx(transactionId).onceSealed();
+      console.log(result);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    checkCollection();
+  }, [checkCollection]);
+
   return (
-    <div>
+    <div style={{padding: '16px'}}>
       <div>
         <h1>Accounts</h1>
         {accounts.map((account, index) => {
@@ -103,14 +218,24 @@ function Page(props) {
           );
         })}
         <h1>Commands</h1>
-        <div>
+        <p>
           <button onClick={onExecuteScript}>Execute Script</button>
-        </div>
-        <div>
+        </p>
+        <p>
           <input type="text" value={amount} onChange={(event) => setAmount(event.target.value)} />
           <input type="text" value={receiverAddress} onChange={(event) => setReceiverAddress(event.target.value)} />
           <button onClick={onSend}>Send FLOW</button>
-        </div>
+        </p>
+        <p>
+          {hasCollection === false &&
+            <button onClick={onCreateCollection}>create collection</button>
+          }
+        </p>
+        <p>
+          <input type="text" value={niftyName} onChange={(event) => setNiftyName(event.target.value)} />
+          <input type="text" value={receiverAddress} onChange={(event) => setReceiverAddress(event.target.value)} />
+          <button onClick={onMint}>Mint Nifty</button>
+        </p>
         <div>
           <button onClick={onSignOut}>Sign Out</button>
         </div>
