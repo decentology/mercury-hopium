@@ -81,7 +81,18 @@ function Account(props) {
       ])
     ]).then(fcl.decode);
 
-    setNifties(nifties);
+    if (nifties) {
+      setNifties(
+        nifties
+          .map((nifty) => ({
+            ID: Number.parseInt(nifty.ID),
+            name: nifty.name
+          }))
+          .sort((a, b) => a.ID - b.ID)
+      );
+    } else {
+      setNifties(null);
+    }
   };
 
   useEffect(() => {
