@@ -52,6 +52,7 @@ function Account(props) {
   };
 
   const fetchCollection = async (address) => {
+    console.log(`fetchCollection: ${address}`);
     const nifties = await fcl.send([
       fcl.script`
         import AwesomeNifty from 0xccea6c9965b5831a
@@ -101,6 +102,12 @@ function Account(props) {
     fetchCollection(props.address);
   }, [props.address]);
 
+  useEffect(() => {
+    fetchCollection(props.address);
+  }, [props.address, props.timestamp]);
+
+  console.log(props.address, props.timestamp);
+
   return (
     <div>
       <ul>
@@ -117,7 +124,7 @@ function Account(props) {
           <ul>
             {nifties.map((nifty) => {
               return (
-                <li key={nifty.ID}>{nifty.name}</li>
+                <li key={nifty.ID}>{nifty.ID}: {nifty.name}</li>
               );
             })}
           </ul>

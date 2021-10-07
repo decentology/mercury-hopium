@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useReducer} from 'react';
 import * as fcl from '@onflow/fcl';
 import * as FlowTypes from '@onflow/types';
 
@@ -9,8 +9,35 @@ const accounts = [
   '0xd9c6c734c01fe2e1',
   '0x68da684995d89f0e',
   '0xe37a242dfff69bbc',
-  '0xa3ed3e0598a583bd'
+  '0xa3ed3e0598a583bd',
+  '0xfd7bb25f1d46e09f'
 ];
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'reloadAccounts': {
+      return {
+        ...state,
+        accounts: [...state.accounts],
+        timestamp: Date.now()
+      };
+    }
+    case 'setStatus': {
+      return {
+        ...state,
+        status: action.payload
+      };
+    }
+    case 'setNiftyID': {
+      return {
+        ...state,
+        niftyID: action.payload
+      };
+    }
+    default:
+      return state;
+  }
+}
 
 function Page(props) {
   const {user} = props;
@@ -18,6 +45,19 @@ function Page(props) {
   const [receiverAddress, setReceiverAddress] = useState(accounts[0]);
   const [hasCollection, setHasCollection] = useState(null);
   const [niftyName, setNiftyName] = useState('');
+
+  const [state, dispatch] = useReducer(reducer, {
+    status: null,
+    accounts: [
+      '0xccea6c9965b5831a',
+      '0xd9c6c734c01fe2e1',
+      '0x68da684995d89f0e',
+      '0xe37a242dfff69bbc',
+      '0xa3ed3e0598a583bd'
+    ],
+    timestamp: Date.now(),
+    niftyID: null
+  });
 
   const onSignOut = (event) => {
     event.preventDefault();
@@ -160,17 +200,14 @@ function Page(props) {
     event.preventDefault();
     
     try {
+      dispatch({type: 'setStatus', payload: 'pending'});
+
       const transactionId = await fcl.send([
         fcl.transaction`
           import AwesomeNifty from 0xccea6c9965b5831a
 
           transaction(name: String, receiverAddress: Address) {
             prepare(account: AuthAccount) {
-              // Authorized
-              // let collection <- account.load<@AwesomeNifty.Collection>(from: /storage/awesomeNiftyCollection)!
-              // account.save(<- collection, to: /storage/awesomeNiftyCollection)
-              // destroy collection
-              
               let minter <- account.load<@AwesomeNifty.Minter>(from: /storage/awesomeNiftyMinter)!
               let nifty <- minter.mint(name: name)
               account.save(
@@ -197,8 +234,74 @@ function Page(props) {
         fcl.limit(9999)
       ]).then(fcl.decode);
 
-      const result = await fcl.tx(transactionId).onceSealed();
-      console.log(result);
+      dispatch({type: 'setStatus', payload: 'submitted'});
+
+      fcl.tx(transactionId).onceFinalized().then(
+        () => dispatch({type: 'setStatus', payload: 'finalized'})
+      );
+      fcl.tx(transactionId).onceExecuted().then(
+        () => dispatch({type: 'setStatus', payload: 'executed'})
+      );
+      fcl.tx(transactionId).onceSealed().then(
+        () => dispatch({type: 'setStatus', payload: 'sealed'})
+      );
+
+      await fcl.tx(transactionId).onceExecuted();
+      dispatch({type: 'reloadAccounts'});
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const onSendNifty = async (event) => {
+    event.preventDefault();
+    
+    try {
+      dispatch({type: 'setStatus', payload: 'pending'});
+
+      const transactionId = await fcl.send([
+        fcl.transaction`
+          import AwesomeNifty from 0xccea6c9965b5831a
+
+          transaction(ID: UInt64, receiverAddress: Address) {
+            prepare(account: AuthAccount) {
+              let collection <- account.
+                load<@AwesomeNifty.Collection>(from: /storage/awesomeNiftyCollection)
+              let nifty <- collection.withdraw(niftyID: ID)
+              account.save<@AwesomeNifty.Collection>(<- collection, to: /storage/awesomeNiftyCollection)
+
+              let receiver = getAccount(receiverAddress)
+                .getCapability(/public/awesomeNiftyCollection)
+                .borrow<&{AwesomeNifty.Receiver}>()
+                ?? panic("Couldn't borrow the receiver's collection.")
+
+              receiver.deposit(nifty: <- nifty)
+            }
+          }
+        `,
+        fcl.args([
+          fcl.arg(Number.parseInt(state.niftyID), FlowTypes.UInt64),
+          fcl.arg(receiverAddress, FlowTypes.Address)
+        ]),
+        fcl.payer(fcl.authz),
+        fcl.proposer(fcl.authz),
+        fcl.authorizations([fcl.authz]),
+        fcl.limit(9999)
+      ]).then(fcl.decode);
+
+      dispatch({type: 'setStatus', payload: 'submitted'});
+
+      fcl.tx(transactionId).onceFinalized().then(
+        () => dispatch({type: 'setStatus', payload: 'finalized'})
+      );
+      fcl.tx(transactionId).onceExecuted().then(
+        () => dispatch({type: 'setStatus', payload: 'executed'})
+      );
+      fcl.tx(transactionId).onceSealed().then(
+        () => dispatch({type: 'setStatus', payload: 'sealed'})
+      );
+
+      await fcl.tx(transactionId).onceExecuted();
     } catch (error) {
       console.error(error);
     }
@@ -211,12 +314,6 @@ function Page(props) {
   return (
     <div style={{padding: '16px'}}>
       <div>
-        <h1>Accounts</h1>
-        {accounts.map((account, index) => {
-          return (
-            <Account key={index} address={account} />
-          );
-        })}
         <h1>Commands</h1>
         <p>
           <button onClick={onExecuteScript}>Execute Script</button>
@@ -236,9 +333,26 @@ function Page(props) {
           <input type="text" value={receiverAddress} onChange={(event) => setReceiverAddress(event.target.value)} />
           <button onClick={onMint}>Mint Nifty</button>
         </p>
+        <p>
+          <input type="text" value={state.niftyID || ''} onChange={(event) => dispatch({type: 'setNiftyID', payload: event.target.value})} />
+          <input type="text" value={receiverAddress} onChange={(event) => setReceiverAddress(event.target.value)} />
+          <button onClick={onSendNifty}>Send Nifty</button>
+        
+        </p>
+        <p>{state.status && `Status: ${state.status}`}</p>
         <div>
           <button onClick={onSignOut}>Sign Out</button>
         </div>
+        <h1>Accounts</h1>
+        {accounts.map((account, index) => {
+          return (
+            <Account
+              key={index}
+              address={account}
+              timestamp={state.timestamp}
+            />
+          );
+        })}
       </div>
     </div>
   );
