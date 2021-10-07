@@ -50,10 +50,12 @@ function Page(props) {
     status: null,
     accounts: [
       '0xccea6c9965b5831a',
-      '0xd9c6c734c01fe2e1',
-      '0x68da684995d89f0e',
-      '0xe37a242dfff69bbc',
-      '0xa3ed3e0598a583bd'
+      // '0xd9c6c734c01fe2e1',
+      // '0x68da684995d89f0e',
+      // '0xe37a242dfff69bbc',
+      // '0xa3ed3e0598a583bd',
+      '0xa39e7dc623a5988e',
+      '0xfd7bb25f1d46e09f',
     ],
     timestamp: Date.now(),
     niftyID: null
@@ -265,8 +267,7 @@ function Page(props) {
 
           transaction(ID: UInt64, receiverAddress: Address) {
             prepare(account: AuthAccount) {
-              let collection <- account.
-                load<@AwesomeNifty.Collection>(from: /storage/awesomeNiftyCollection)
+              let collection <- account.load<@AwesomeNifty.Collection>(from: /storage/awesomeNiftyCollection)!
               let nifty <- collection.withdraw(niftyID: ID)
               account.save<@AwesomeNifty.Collection>(<- collection, to: /storage/awesomeNiftyCollection)
 
@@ -344,7 +345,7 @@ function Page(props) {
           <button onClick={onSignOut}>Sign Out</button>
         </div>
         <h1>Accounts</h1>
-        {accounts.map((account, index) => {
+        {state.accounts.map((account, index) => {
           return (
             <Account
               key={index}
